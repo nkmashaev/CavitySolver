@@ -1,0 +1,8 @@
+mesh=grids/fine.msh
+Re=100
+ACP=1
+CFL=12.0
+loctime=1
+grad=1
+RK=4
+do_smoothing=1
