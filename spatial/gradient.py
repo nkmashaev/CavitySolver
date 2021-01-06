@@ -4,6 +4,7 @@ from numpy import linalg as la
 
 from spatial.interp import linear_interp
 
+
 @numba.njit
 def green_gauss(
     ni: int,
@@ -82,6 +83,7 @@ def green_gauss(
 
             if vol_right >= 1e-14:
                 gradp[i + 1, j + 1, :] -= sf[:] * pf / vol_right
+
 
 @numba.njit
 def least_squares(

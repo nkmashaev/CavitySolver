@@ -1,50 +1,52 @@
 import os
-
 from typing import Tuple
-from numpy import linalg as la
-import numpy as np
+
 import numba
+import numpy as np
+from numpy import linalg as la
 
 import local_time
-from spatial.interp import linear_interp
 from meshtools import metric
 from meshtools import output as out
 from meshtools import taskinit as inp
 from spatial import gradient
+from spatial.interp import linear_interp
+
 
 @numba.njit
-def explicit_step(dt : np.ndarray,
-                  p: np.ndarray,
-                  pn: np.ndarray,
-                  gradp: np.ndarray,
-                  T: np.ndarray,
-                  Tn: np.ndarray,
-                  gradT: np.ndarray,
-                  V: np.ndarray,
-                  Vn: np.ndarray,
-                  gradu: np.ndarray,
-                  gradv: np.ndarray,
-                  resc: np.ndarray,
-                  resx: np.ndarray,
-                  resy: np.ndarray,
-                  resT: np.ndarray,
-                  cell_volume: np.ndarray,
-                  cell_center: np.ndarray,
-                  i_face_center: np.ndarray,
-                  i_face_vector: np.ndarray,
-                  j_face_center: np.ndarray,
-                  j_face_vector: np.ndarray,
-                  Re: np.float64,
-                  Pr: np.float64,
-                  CFL: np.float64,
-                  ACP: np.float64,
-                  RK_coeff: np.ndarray,
-                  gradmode: np.int32,
-                  ggiter: np.int32,
-                  calc_local: np.int32,
-                  do_smoothing: np.int32
-                  )->Tuple[np.float64, np.float64, np.float64,np.float64]:
-    #grad calculation
+def explicit_step(
+    dt: np.ndarray,
+    p: np.ndarray,
+    pn: np.ndarray,
+    gradp: np.ndarray,
+    T: np.ndarray,
+    Tn: np.ndarray,
+    gradT: np.ndarray,
+    V: np.ndarray,
+    Vn: np.ndarray,
+    gradu: np.ndarray,
+    gradv: np.ndarray,
+    resc: np.ndarray,
+    resx: np.ndarray,
+    resy: np.ndarray,
+    resT: np.ndarray,
+    cell_volume: np.ndarray,
+    cell_center: np.ndarray,
+    i_face_center: np.ndarray,
+    i_face_vector: np.ndarray,
+    j_face_center: np.ndarray,
+    j_face_vector: np.ndarray,
+    Re: np.float64,
+    Pr: np.float64,
+    CFL: np.float64,
+    ACP: np.float64,
+    RK_coeff: np.ndarray,
+    gradmode: np.int32,
+    ggiter: np.int32,
+    calc_local: np.int32,
+    do_smoothing: np.int32,
+) -> Tuple[np.float64, np.float64, np.float64, np.float64]:
+    # grad calculation
     gradp[:, :, :] = 0.0
     gradT[:, :, :] = 0.0
     gradu[:, :, :] = 0.0
@@ -58,7 +60,7 @@ def explicit_step(dt : np.ndarray,
         for i in range(1, ni):
             for j in range(1, nj):
                 ncell = np.array(
-                        [[i - 1, j], [i + 1, j], [i, j -1], [i ,j + 1]], dtype=np.int32
+                    [[i - 1, j], [i + 1, j], [i, j - 1], [i, j + 1]], dtype=np.int32
                 )
                 dx_dx = 0.0
                 dx_dy = 0.0
@@ -75,7 +77,7 @@ def explicit_step(dt : np.ndarray,
                     dy_dy += dy * dy * wsqr
                 r11 = np.sqrt(dx_dx)
                 r12 = dx_dy / r11
-                r22 = np.sqrt(dy_dy - r12*r12)
+                r22 = np.sqrt(dy_dy - r12 * r12)
 
                 for neighbour in ncell:
                     i_n, j_n = neighbour
@@ -85,13 +87,13 @@ def explicit_step(dt : np.ndarray,
                     wsqr = 1.0 / (dx * dx + dy * dy)
                     a1 = dx / (r11 * r11)
                     a2 = (dy - r12 * dx / r11) / (r22 * r22)
-                    theta = np.array([a1 - r12 * a2 / r11, a2], dtype = np.float64)
+                    theta = np.array([a1 - r12 * a2 / r11, a2], dtype=np.float64)
                     theta[:] *= wsqr
                     gradp[i, j, :] += theta[:] * (p[i_n, j_n] - p[i, j])
                     gradu[i, j, :] += theta[:] * (V[i_n, j_n, 0] - V[i, j, 0])
                     gradv[i, j, :] += theta[:] * (V[i_n, j_n, 1] - V[i, j, 1])
                     gradT[i, j, :] += theta[:] * (T[i_n, j_n] - T[i, j])
-    
+
     # calc fluxes on faces
     rnc = np.zeros(2, dtype=np.float64)
     v_left = np.zeros(2, dtype=np.float64)
@@ -139,24 +141,24 @@ def explicit_step(dt : np.ndarray,
                 p_left = p[i, j + 1]
                 T_left = T[i, j + 1]
                 r_left = cell_center[i, j + 1, :]
-                dt_left= dt[i, j + 1]
+                dt_left = dt[i, j + 1]
                 vol_left = cell_volume[i, j + 1]
                 d_left = la.norm(r_left[:] - rf[:])
                 v_left[:] = V[i, j + 1, :]
                 gradu_l[:] = gradu[i, j + 1, :]
                 gradv_l[:] = gradv[i, j + 1, :]
                 gradT_l[:] = gradT[i, j + 1, :]
-            
+
                 dnc = la.norm(r_right[:] - r_left[:])
                 rnc[:] = (r_right[:] - r_left[:]) / dnc
-            
+
                 graduf[:] = linear_interp(d_right, d_left, gradu_r[:], gradu_l[:])
                 gradvf[:] = linear_interp(d_right, d_left, gradv_r[:], gradv_l[:])
                 gradTf[:] = linear_interp(d_right, d_left, gradT_r[:], gradT_l[:])
                 vf[:] = linear_interp(d_right, d_left, v_right[:], v_left[:])
                 pf = linear_interp(d_right, d_left, p_right, p_left)
-                dVdn[:] = (v_right[:] - v_left[:]) /dnc
-                dTdn = (T_right - T_left) /dnc
+                dVdn[:] = (v_right[:] - v_left[:]) / dnc
+                dTdn = (T_right - T_left) / dnc
                 if np.absolute(vol_left) < 1e-14:
                     dVdn_c[0] = np.dot(gradu_r[:], nf[:])
                     dVdn_c[1] = np.dot(gradv_r[:], nf[:])
@@ -167,8 +169,8 @@ def explicit_step(dt : np.ndarray,
                     dTdn_c = np.dot(gradT_r[:], nf[:])
                     dTdn = (5.0 * dTdn - 2.0 * dTdn_c) / 3.0
                     gradTf[:] = gradT_r[:]
-                    #dTdn = 0.0
-                    #gradTf[:] = 0.0
+                    # dTdn = 0.0
+                    # gradTf[:] = 0.0
                 if np.absolute(vol_right) < 1e-14:
                     dVdn_c[0] = np.dot(gradu_l[:], nf[:])
                     dVdn_c[1] = np.dot(gradv_l[:], nf[:])
@@ -179,11 +181,11 @@ def explicit_step(dt : np.ndarray,
                     dTdn_c = np.dot(gradT_l[:], nf[:])
                     dTdn = (5.0 * dTdn - 2.0 * dTdn_c) / 3.0
                     gradTf[:] = gradT_l[:]
-                    #dTdn = 0.0
-                    #gradTf[:] = 0.0
+                    # dTdn = 0.0
+                    # gradTf[:] = 0.0
                 dVdn[0] += np.dot(nf[:] - rnc[:], graduf[:])
                 dVdn[1] += np.dot(nf[:] - rnc[:], gradvf[:])
-                dTdn += np.dot(nf[:] - rnc[:], gradTf[:]) 
+                dTdn += np.dot(nf[:] - rnc[:], gradTf[:])
 
                 if np.dot(sf[:], vf[:]) > 0:
                     if np.absolute(vol_left) >= 1e-14:
@@ -199,11 +201,11 @@ def explicit_step(dt : np.ndarray,
                     else:
                         uf[:] = 2.0 * v_right[:] - v_left[:]
                         Tf = 2.0 * T_right - T_left
-            
+
                 sf_norm = la.norm(sf)
                 sf_dot_vf = np.dot(sf[:], vf[:])
                 rescf = sf_dot_vf
-            
+
                 resxf = uf[0] * sf_dot_vf + pf * sf[0] - dVdn[0] * sf_norm / Re
 
                 resyf = uf[1] * sf_dot_vf + pf * sf[1] - dVdn[1] * sf_norm / Re
@@ -220,7 +222,7 @@ def explicit_step(dt : np.ndarray,
                     resx[i + 1, j + 1] -= resxf
                     resy[i + 1, j + 1] -= resyf
                     resT[i + 1, j + 1] -= resTf
-    
+
         for i in range(ni - 1):
             for j in range(nj):
                 rf = j_face_center[i, j, :]
@@ -241,7 +243,7 @@ def explicit_step(dt : np.ndarray,
                 p_left = p[i + 1, j]
                 T_left = T[i + 1, j]
                 r_left = cell_center[i + 1, j, :]
-                dt_left= dt[i + 1, j]
+                dt_left = dt[i + 1, j]
                 vol_left = cell_volume[i + 1, j]
                 d_left = la.norm(r_left[:] - rf[:])
                 v_left[:] = V[i + 1, j, :]
@@ -257,8 +259,8 @@ def explicit_step(dt : np.ndarray,
                 gradTf[:] = linear_interp(d_right, d_left, gradT_r[:], gradT_l[:])
                 vf[:] = linear_interp(d_right, d_left, v_right[:], v_left[:])
                 pf = linear_interp(d_right, d_left, p_right, p_left)
-                dVdn[:] = (v_right[:] - v_left[:]) /dnc
-                dTdn = (T_right - T_left) /dnc
+                dVdn[:] = (v_right[:] - v_left[:]) / dnc
+                dTdn = (T_right - T_left) / dnc
                 if np.absolute(vol_left) < 1e-14:
                     dVdn_c[0] = np.dot(gradu_r[:], nf[:])
                     dVdn_c[1] = np.dot(gradv_r[:], nf[:])
@@ -266,9 +268,9 @@ def explicit_step(dt : np.ndarray,
                     graduf[:] = gradu_r[:]
                     gradvf[:] = gradv_r[:]
 
-                    #dTdn_c = np.dot(gradT_r[:], nf[:])
-                    #dTdn = (5.0 * dTdn - 2.0 * dTdn_c) / 3.0
-                    #gradTf[:] = gradT_r[:]
+                    # dTdn_c = np.dot(gradT_r[:], nf[:])
+                    # dTdn = (5.0 * dTdn - 2.0 * dTdn_c) / 3.0
+                    # gradTf[:] = gradT_r[:]
                     dTdn = 0.0
                     gradTf[:] = 0.0
                 if np.absolute(vol_right) < 1e-14:
@@ -278,9 +280,9 @@ def explicit_step(dt : np.ndarray,
                     graduf[:] = gradu_l[:]
                     gradvf[:] = gradv_l[:]
 
-                    #dTdn_c = np.dot(gradT_l[:], nf[:])
-                    #dTdn = (5.0 * dTdn - 2.0 * dTdn_c) / 3.0
-                    #gradTf[:] = gradT_l[:]
+                    # dTdn_c = np.dot(gradT_l[:], nf[:])
+                    # dTdn = (5.0 * dTdn - 2.0 * dTdn_c) / 3.0
+                    # gradTf[:] = gradT_l[:]
                     dTdn = 0.0
                     gradTf[:] = 0.0
                 dVdn[0] += np.dot(nf[:] - rnc[:], graduf[:])
@@ -326,7 +328,7 @@ def explicit_step(dt : np.ndarray,
             for i in range(1, ni):
                 for j in range(1, nj):
                     ncell = np.array(
-                        [[i - 1, j], [i + 1, j], [i, j -1], [i ,j + 1]], dtype=np.int32
+                        [[i - 1, j], [i + 1, j], [i, j - 1], [i, j + 1]], dtype=np.int32
                     )
                     for i_n, j_n in ncell:
                         resc[i, j] += 0.5 * resc[i_n, j_n]
@@ -354,30 +356,44 @@ def explicit_step(dt : np.ndarray,
 
         if calc_local:
             local_time.calc_loctime(
-                                ni,
-                                nj,
-                                CFL,
-                                ACP,
-                                dt,
-                                V,
-                                cell_volume,
-                                cell_center,
-                                i_face_center,
-                                i_face_vector,
-                                j_face_center,
-                                j_face_vector)
+                ni,
+                nj,
+                CFL,
+                ACP,
+                dt,
+                V,
+                cell_volume,
+                cell_center,
+                i_face_center,
+                i_face_vector,
+                j_face_center,
+                j_face_vector,
+            )
 
-        p[1:ni, 1:nj] = pn[1:ni, 1:nj] - alpha * resc[1:ni, 1:nj] * dt[1:ni, 1:nj] * ACP / cell_volume[1:ni, 1:nj]
-        V[1:ni, 1:nj, 0] = Vn[1:ni, 1:nj, 0] - alpha * resx[1:ni, 1:nj] * dt[1:ni, 1:nj] / cell_volume[1:ni, 1:nj]
-        V[1:ni, 1:nj, 1] = Vn[1:ni, 1:nj, 1] - alpha * resy[1:ni, 1:nj] * dt[1:ni, 1:nj] / cell_volume[1:ni, 1:nj]
-        T[1:ni, 1:nj] = Tn[1:ni, 1:nj] - alpha * resT[1:ni, 1:nj] * dt[1:ni, 1:ni] / cell_volume[1:ni, 1:nj]
-    
+        p[1:ni, 1:nj] = (
+            pn[1:ni, 1:nj]
+            - alpha * resc[1:ni, 1:nj] * dt[1:ni, 1:nj] * ACP / cell_volume[1:ni, 1:nj]
+        )
+        V[1:ni, 1:nj, 0] = (
+            Vn[1:ni, 1:nj, 0]
+            - alpha * resx[1:ni, 1:nj] * dt[1:ni, 1:nj] / cell_volume[1:ni, 1:nj]
+        )
+        V[1:ni, 1:nj, 1] = (
+            Vn[1:ni, 1:nj, 1]
+            - alpha * resy[1:ni, 1:nj] * dt[1:ni, 1:nj] / cell_volume[1:ni, 1:nj]
+        )
+        T[1:ni, 1:nj] = (
+            Tn[1:ni, 1:nj]
+            - alpha * resT[1:ni, 1:nj] * dt[1:ni, 1:ni] / cell_volume[1:ni, 1:nj]
+        )
+
     resc_max = np.amax(np.absolute(resc))
     resx_max = np.amax(np.absolute(resx))
     resy_max = np.amax(np.absolute(resy))
     resT_max = np.amax(np.absolute(resT))
 
     return resc_max, resx_max, resy_max, resT_max
+
 
 if __name__ == "__main__":
     # read initialization parameters
@@ -392,13 +408,13 @@ if __name__ == "__main__":
         print(f"Number of green gauss iterations equals {taskinit.gauss_iter}")
         gg_iter = taskinit.gauss_iter
         grad_calc = gradient.green_gauss
-    
+
     print(f"Re={taskinit.Re}")
     Re = taskinit.Re
-    
+
     print(f"CFL={taskinit.CFL}")
     CFL = taskinit.CFL
-    
+
     print(f"Artificial compressibility parameter={taskinit.ACP}")
     ACP = taskinit.ACP
 
@@ -425,7 +441,7 @@ if __name__ == "__main__":
     elif RK == 4:
         RK_coeff = np.array([1.084, 0.2602, 0.5052, 1.000], dtype=np.float64)
     elif RK == 5:
-        RK_coeff = np.array([0.0695, 0.1602, 0.2898, 0.5060, 1.000], dtype =np.float64)
+        RK_coeff = np.array([0.0695, 0.1602, 0.2898, 0.5060, 1.000], dtype=np.float64)
 
     # read mesh file
     with open(taskinit.msh, "r") as in_file:
@@ -462,7 +478,7 @@ if __name__ == "__main__":
     p = np.zeros((ni + 1, nj + 1), dtype=np.float64)
     pn = np.copy(p)
     gradp = np.zeros((ni + 1, nj + 1, 2), dtype=np.float64)
-    V = np.zeros((ni + 1, nj + 1, 2) ,dtype=np.float64)
+    V = np.zeros((ni + 1, nj + 1, 2), dtype=np.float64)
     Vn = np.copy(V)
     gradu = np.zeros((ni + 1, nj + 1, 2), dtype=np.float64)
     gradv = np.zeros((ni + 1, nj + 1, 2), dtype=np.float64)
@@ -472,7 +488,7 @@ if __name__ == "__main__":
     dt = np.zeros((ni + 1, nj + 1), dtype=np.float64)
     V[1:ni, -1, 0] = 1.0
     T[0, 1:nj] = 0.0
-    T[-1, 1:nj ] = 0.1
+    T[-1, 1:nj] = 0.1
     resc = np.zeros((ni + 1, nj + 1), dtype=np.float64)
     resx = np.zeros((ni + 1, nj + 1), dtype=np.float64)
     resy = np.zeros((ni + 1, nj + 1), dtype=np.float64)
@@ -481,7 +497,7 @@ if __name__ == "__main__":
     vol_max = np.amax(np.absolute(cell_volume))
     if not calc_local:
         dt[1:ni, 1:nj] = CFL * vol_max / np.amax(np.absolute(V))
-    
+
     Pr = 1.0
 
     outp = out.OutputManager(x, y)
@@ -492,55 +508,60 @@ if __name__ == "__main__":
 
     residual_file = open("residual.dat", "w")
     for n in range(1, 100000):
-        if (n % 1000 == 0):
+        if n % 1000 == 0:
             outp.output("cavity.plt")
 
         pn[:, :] = p[:, :]
         Vn[:, :, :] = V[:, :, :]
         Tn[:, :] = T[:, :]
-        resc_max, resx_max, resy_max, resT_max = explicit_step(dt,
-                                            p,
-                                            pn,
-                                            gradp,
-                                            T,
-                                            Tn,
-                                            gradT,
-                                            V,
-                                            Vn,
-                                            gradu,
-                                            gradv,
-                                            resc,
-                                            resx,
-                                            resy,
-                                            resT,
-                                            cell_volume,
-                                            cell_center,
-                                            i_face_center,
-                                            i_face_vector,
-                                            j_face_center,
-                                            j_face_vector,
-                                            Re,
-                                            Pr,
-                                            CFL,
-                                            ACP,
-                                            RK_coeff,
-                                            taskinit.grad[0],
-                                            gg_iter,
-                                            calc_local,
-                                            do_smoothing)
+        resc_max, resx_max, resy_max, resT_max = explicit_step(
+            dt,
+            p,
+            pn,
+            gradp,
+            T,
+            Tn,
+            gradT,
+            V,
+            Vn,
+            gradu,
+            gradv,
+            resc,
+            resx,
+            resy,
+            resT,
+            cell_volume,
+            cell_center,
+            i_face_center,
+            i_face_vector,
+            j_face_center,
+            j_face_vector,
+            Re,
+            Pr,
+            CFL,
+            ACP,
+            RK_coeff,
+            taskinit.grad[0],
+            gg_iter,
+            calc_local,
+            do_smoothing,
+        )
         p[0, 1:nj] = p[1, 1:nj]
         p[-1, 1:nj] = p[-2, 1:nj]
         p[1:ni, 0] = p[1:ni, 1]
         p[1:ni, -1] = p[1:ni, -2]
-        #T[0, 1:nj] = -T[1, 1:nj]
-        #T[-1, 1:nj] = 0.2 - T[-2, 1:nj]
+        # T[0, 1:nj] = -T[1, 1:nj]
+        # T[-1, 1:nj] = 0.2 - T[-2, 1:nj]
         T[1:ni, 0] = T[1:ni, 1]
         T[1:ni, -1] = T[1:ni, -2]
-        #V[1:ni, -1, 0] = 2.0 - V[1:ni, -2, 0]
-        #V[1:ni, -1, 1] = -V[1:ni, -2, 1]
-        #V[1:ni, 0, :] = -V[1:ni, 1, :]
-        #V[0, 1:nj, :] = -V[1, 1:nj , :]
-        #V[-1, 1:nj, :] = -V[-2, 1:nj, :]
+        # V[1:ni, -1, 0] = 2.0 - V[1:ni, -2, 0]
+        # V[1:ni, -1, 1] = -V[1:ni, -2, 1]
+        # V[1:ni, 0, :] = -V[1:ni, 1, :]
+        # V[0, 1:nj, :] = -V[1, 1:nj , :]
+        # V[-1, 1:nj, :] = -V[-2, 1:nj, :]
         print(f"{ n} {resc_max:.11e} {resx_max:.11e} {resy_max:.11e} {resT_max:.11e}")
-        print(f"{ n} {resc_max:.11e} {resx_max:.11e} {resy_max:.11e} {resT_max:.11e}", file=residual_file)
+        print(
+            f"{ n} {resc_max:.11e} {resx_max:.11e} {resy_max:.11e} {resT_max:.11e}",
+            file=residual_file,
+        )
     residual_file.close()

@@ -1,31 +1,34 @@
-from spatial.interp import linear_interp
+import numba
 import numpy as np
 from numpy import linalg as la
-import numba
+
+from spatial.interp import linear_interp
+
 
 @numba.njit
 def calc_loctime(
-        ni: np.int32,
-        nj: np.int32,
-        CFL: np.float64,
-        ACP: np.float64,
-        dt: np.ndarray,
-        V: np.ndarray,
-        cell_volume: np.ndarray,
-        cell_center: np.ndarray,
-        i_face_center: np.ndarray,
-        i_face_vector: np.ndarray,
-        j_face_center: np.ndarray,
-        j_face_vector: np.ndarray):
-    
+    ni: np.int32,
+    nj: np.int32,
+    CFL: np.float64,
+    ACP: np.float64,
+    dt: np.ndarray,
+    V: np.ndarray,
+    cell_volume: np.ndarray,
+    cell_center: np.ndarray,
+    i_face_center: np.ndarray,
+    i_face_vector: np.ndarray,
+    j_face_center: np.ndarray,
+    j_face_vector: np.ndarray,
+):
+
     rf = np.zeros((4, 2), dtype=np.float64)
     sf = np.copy(rf)
     vf = np.zeros(2, dtype=np.float64)
     rc = np.zeros(2, dtype=np.float64)
     rn = np.zeros(2, dtype=np.float64)
 
-    for i in range(1,ni):
-        for j in range(1,nj):
+    for i in range(1, ni):
+        for j in range(1, nj):
             ncell = np.array(
                 [[i - 1, j], [i + 1, j], [i, j - 1], [i, j + 1]], dtype=np.int32
             )
@@ -33,12 +36,12 @@ def calc_loctime(
             rf[1, :] = i_face_center[i, j - 1, :]
             rf[2, :] = j_face_center[i - 1, j - 1, :]
             rf[3, :] = j_face_center[i - 1, j, :]
-            
+
             sf[0, :] = -i_face_vector[i - 1, j - 1, :]
             sf[1, :] = i_face_vector[i, j - 1, :]
             sf[2, :] = -j_face_vector[i - 1, j - 1, :]
             sf[3, :] = j_face_vector[i - 1, j, :]
-        
+
             vol = np.absolute(cell_volume[i, j])
             rc[:] = cell_center[i, j, :]
             first = True
@@ -62,9 +65,10 @@ def calc_loctime(
                     if sf_norm > sf_max:
                         sf_max = sf_norm
             dt_conv_rev = gf_max / (CFL * vol)
-            dt_diff_rev = (2.0 * sf_max * la.norm(V[i, j, :]) + np.sqrt(ACP)) / (CFL * vol)
-            if (dt_conv_rev + dt_diff_rev) > 1.e-10:
-                dt[i, j] = 1.0/(dt_conv_rev + dt_diff_rev)
+            dt_diff_rev = (2.0 * sf_max * la.norm(V[i, j, :]) + np.sqrt(ACP)) / (
+                CFL * vol
+            )
+            if (dt_conv_rev + dt_diff_rev) > 1.0e-10:
+                dt[i, j] = 1.0 / (dt_conv_rev + dt_diff_rev)
             else:
                 dt[i, j] = 0.0
-                            

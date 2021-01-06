@@ -72,12 +72,15 @@ class InputManager:
         if not "ACP" in self.__storage:
             raise AttributeError("Error: ACP parameter is not defined!")
         if not isinstance(self.__storage["ACP"], (int, float)):
-            raise TypeError("Error: Artificial Compressibility parameter"
-                            + " expected to be float!")
+            raise TypeError(
+                "Error: Artificial Compressibility parameter" + " expected to be float!"
+            )
         if self.__storage["ACP"] <= 0:
-            raise ValueError("Error: Artificial compressibility parameter" +
-                     " expected to be positive!")
-    
+            raise ValueError(
+                "Error: Artificial compressibility parameter"
+                + " expected to be positive!"
+            )
+
         if not isinstance(self.__storage.get("loctime", 0), int):
             raise TypeError("Error: Local time method id expected to be integer!")
         if not (0 <= self.__storage.get("loctime", 0) <= 1):
@@ -89,8 +92,10 @@ class InputManager:
             raise ValueError("Error: Unknown smoothing method id!")
 
         if not isinstance(self.__storage.get("RK", 1), int):
-            raise TypeError("Error: Runge-Kutta number of levels expected to be integer!")
-        if not (1 <= self.__storage.get("RK",1) <= 5):
+            raise TypeError(
+                "Error: Runge-Kutta number of levels expected to be integer!"
+            )
+        if not (1 <= self.__storage.get("RK", 1) <= 5):
             raise ValueError("Error: Unknown RK level coefficients!")
 
         if not isinstance(self.__storage.get("grad", 0), int):
